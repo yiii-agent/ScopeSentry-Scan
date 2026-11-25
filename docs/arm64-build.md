@@ -50,13 +50,28 @@ docker run --rm -v "$(pwd)":/src -w /src golang:1.24-bookworm sh -c \
    CGO_ENABLED=1 go build -trimpath -ldflags '-s -w' -o ksubdomain-arm64 ./cmd/ksubdomain"
 ```
 
-### 4. go-rod 浏览器
-go-rod(httpx 截图/指纹)默认在线下载 chromium,但下载源无 arm64 版本。
-镜像内已通过 apt 安装 chromium,部署时在 compose 中指定:
+### 4. go-rod 浏览器(arm64 无在线下载源,需两处配合)
+go-rod(httpx 截图/指纹、katana)默认在线下载 chromium,但 arm64 无官方下载源
+(playwright CDN 返回 400)。处理分两层:
 
-```yaml
-environment:
-  ROD_BROWSER_BIN: /usr/bin/chromium
+1. **rod 缓存路径**(镜像构建,见 ScopeSentry 仓库 `scan-build/dockerfile`):
+   rod(v0.116.2)只认缓存路径 `~/.cache/rod/browser/chromium-1124/chrome`
+   (arm64 对应 playwright revision 1124,二进制名必须是 `chrome`),
+   构建时把 apt 安装的 chromium 链接到该路径(兼容旧版目录 chromium-1321438);
+2. **ROD_BROWSER_BIN**(部署环境变量):katana 的 rod 启动器通过
+   `ROD_BROWSER_BIN=/usr/bin/chromium` 直接使用镜像内 chromium。
+
+### 5. HttpxClose 空指针导致任务结束崩溃(本 fork 已修)
+`pkg/utils/httpxrun.go` 的 `HttpxClose()` 未对 `HttpxRun` 判空:当 httpx 初始化
+失败(如 arm64 浏览器缺失)时,每次任务结束都会触发 nil pointer panic,
+扫描进程被容器运行时反复拉起。本 fork 已加判空:
+
+```go
+func HttpxClose() {
+	if HttpxRun != nil {
+		HttpxRun.Close()
+	}
+}
 ```
 
 ## 实测结果

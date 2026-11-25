@@ -141,5 +141,7 @@ func RunAnalyze(target string, resultCallback func(r types.AssetHttp), parameter
 }
 
 func HttpxClose() {
-	HttpxRun.Close()
+	if HttpxRun != nil {
+		HttpxRun.Close()
+	}
 }
